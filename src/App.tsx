@@ -1,9 +1,5 @@
 import { useState, type ComponentType } from 'react';
-
-import {
-  Heart,
-  LogOut,
-} from 'lucide-react';
+import { Heart, LogOut } from 'lucide-react';
 
 import {
   AuthProvider,
@@ -12,6 +8,8 @@ import {
 
 import { AuthScreen } from '@/components/AuthScreen';
 import { PartnerLinking } from '@/components/PartnerLinking';
+import { ThinkingOfYouListener } from '@/components/ThinkingOfYouListener';
+
 import { Dashboard } from '@/components/Dashboard';
 import { Chat } from '@/components/Chat';
 import { Memories } from '@/components/Memories';
@@ -20,6 +18,7 @@ import { LoveFeatures } from '@/components/LoveFeatures';
 import { LocationView } from '@/components/LocationView';
 import { Together } from '@/components/Together';
 import { VideoCall } from '@/components/VideoCall';
+
 import {
   TABS,
   type TabId,
@@ -96,20 +95,9 @@ function AppContent() {
      PARTNER LINKING
      ======================================================= */
 
-  /*
-   * The user is authenticated but has not yet joined
-   * a couple.
-   *
-   * PartnerLinking is responsible for:
-   * - Creating a new couple
-   * - Showing the invite code
-   * - Joining using an invite code
-   * - Checking whether the partner has joined
-   */
-
-if (!couple || !profile?.partner_id) {
-  return <PartnerLinking />;
-}
+  if (!couple || !profile?.partner_id) {
+    return <PartnerLinking />;
+  }
 
   /* =======================================================
      COMPONENT MAP
@@ -133,7 +121,17 @@ if (!couple || !profile?.partner_id) {
      ======================================================= */
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-rose-100 flex flex-col">
+    <div className="min-h-screen bg-cream-100 text-ink-900 flex flex-col">
+
+      {/* ===================================================
+          THINKING OF YOU LISTENER
+
+          This stays active while the user is inside the app.
+          It listens for a Thinking of You event from the
+          partner through Supabase Realtime.
+          =================================================== */}
+
+      <ThinkingOfYouListener />
 
       {/* ===================================================
           HEADER
@@ -307,6 +305,7 @@ if (!couple || !profile?.partner_id) {
 
                 </button>
               );
+
             })}
 
           </div>

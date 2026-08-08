@@ -8,11 +8,14 @@ import {
   Sun,
   Moon,
   Cloud,
+  HeartHandshake,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import type { Mood, MoodType, CalendarEvent } from '@/lib/types';
 import { RelationshipStatus } from '@/components/RelationshipStatus';
+
+// :contentReference[oaicite:0]{index=0}
 
 const MOODS: {
   type: MoodType;
@@ -172,9 +175,7 @@ function daysUntil(dateStr: string): number {
   target.setFullYear(now.getFullYear());
 
   if (target.getTime() < now.getTime()) {
-    target.setFullYear(
-      now.getFullYear() + 1,
-    );
+    target.setFullYear(now.getFullYear() + 1);
   }
 
   return Math.ceil(
@@ -213,6 +214,12 @@ export function Dashboard() {
     useState('');
 
   const [showMoodPicker, setShowMoodPicker] =
+    useState(false);
+
+  const [sendingThinking, setSendingThinking] =
+    useState(false);
+
+  const [thinkingSent, setThinkingSent] =
     useState(false);
 
   /*
@@ -254,10 +261,6 @@ export function Dashboard() {
         .toISOString()
         .split('T')[0];
 
-    /*
-     * Load today's moods
-     */
-
     supabase
       .from('moods')
       .select('*')
@@ -288,10 +291,6 @@ export function Dashboard() {
           theirs as Mood | null,
         );
       });
-
-    /*
-     * Load upcoming calendar events
-     */
 
     supabase
       .from('calendar_events')
@@ -349,6 +348,61 @@ export function Dashboard() {
       supabase.removeChannel(channel);
     };
   }, [couple?.id, user?.id]);
+
+  /*
+   * =========================================================
+   * THINKING OF YOU
+   * =========================================================
+   *
+   * Uses Supabase Realtime Broadcast.
+   * No thinking_of_you database table is required.
+   *
+   * The ThinkingOfYouListener listens for:
+   *
+   * channel: thinking-of-you-{couple.id}
+   * event:   thinking_of_you
+   */
+
+  const sendThinkingOfYou = async () => {
+    if (!couple || !user || sendingThinking) return;
+
+    setSendingThinking(true);
+
+    try {
+      const channel = supabase.channel(
+        `thinking-of-you-${couple.id}`,
+      );
+
+      await channel.subscribe();
+
+      await channel.send({
+        type: 'broadcast',
+        event: 'thinking_of_you',
+        payload: {
+          sender_id: user.id,
+          sender_name:
+            profile?.display_name ?? 'Your partner',
+          message: 'Your partner is thinking of you ❤️',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      await supabase.removeChannel(channel);
+
+      setThinkingSent(true);
+
+      window.setTimeout(() => {
+        setThinkingSent(false);
+      }, 3000);
+    } catch (error) {
+      console.error(
+        'Failed to send thinking of you:',
+        error,
+      );
+    } finally {
+      setSendingThinking(false);
+    }
+  };
 
   /*
    * =========================================================
@@ -466,6 +520,82 @@ export function Dashboard() {
       <RelationshipStatus />
 
       {/* =====================================================
+          THINKING OF YOU
+      ====================================================== */}
+
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-rose-50 via-white to-pink-50 border border-rose-100 p-5 shadow-sm">
+
+        <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-rose-200/30 blur-2xl" />
+
+        <div className="absolute -left-8 -bottom-8 w-24 h-24 rounded-full bg-pink-200/30 blur-2xl" />
+
+        <div className="relative">
+
+          <div className="flex items-center gap-2 mb-1">
+
+            <HeartHandshake className="w-5 h-5 text-rose-500" />
+
+            <span className="text-sm font-semibold text-ink-700">
+              A little reminder
+            </span>
+
+          </div>
+
+          <p className="text-xs text-ink-400 mb-4">
+            Let {partner?.display_name ?? 'your partner'} know you're thinking of them.
+          </p>
+
+          <button
+            type="button"
+            onClick={sendThinkingOfYou}
+            disabled={sendingThinking}
+            className={`w-full py-3.5 rounded-2xl font-medium flex items-center justify-center gap-2 transition-all ${
+              thinkingSent
+                ? 'bg-rose-100 text-rose-600'
+                : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg shadow-rose-200/50 hover:from-rose-600 hover:to-pink-600 hover:scale-[1.01]'
+            } ${
+              sendingThinking
+                ? 'opacity-70 cursor-wait'
+                : ''
+            }`}
+          >
+
+            {thinkingSent ? (
+              <>
+                <Heart
+                  className="w-5 h-5 animate-pulse"
+                  fill="currentColor"
+                />
+                Sent with love ❤️
+              </>
+            ) : sendingThinking ? (
+              <>
+                <Heart
+                  className="w-5 h-5 animate-pulse"
+                  fill="currentColor"
+                />
+                Sending...
+              </>
+            ) : (
+              <>
+                <Heart
+                  className="w-5 h-5"
+                  fill="currentColor"
+                />
+                I'm thinking of you
+              </>
+            )}
+
+          </button>
+
+          <p className="text-[10px] text-ink-300 text-center mt-2">
+            Your partner will receive it instantly
+          </p>
+
+        </div>
+      </div>
+
+      {/* =====================================================
           RELATIONSHIP TIMER
       ====================================================== */}
 
@@ -478,6 +608,7 @@ export function Dashboard() {
         <div className="relative">
 
           <div className="flex items-center gap-2 mb-4">
+
             <Heart
               className="w-5 h-5"
               fill="white"
@@ -486,12 +617,14 @@ export function Dashboard() {
             <span className="text-sm font-medium text-rose-50">
               Together for
             </span>
+
           </div>
 
           <div className="flex items-end gap-4 mb-3">
 
             {duration.years > 0 && (
               <div>
+
                 <span className="font-serif text-4xl font-bold">
                   {duration.years}
                 </span>
@@ -501,10 +634,12 @@ export function Dashboard() {
                     ? 'year'
                     : 'years'}
                 </span>
+
               </div>
             )}
 
             <div>
+
               <span className="font-serif text-4xl font-bold">
                 {duration.days}
               </span>
@@ -512,11 +647,13 @@ export function Dashboard() {
               <span className="text-sm text-rose-100 ml-1">
                 days
               </span>
+
             </div>
 
           </div>
 
           <div className="flex gap-4 text-sm text-rose-100 font-mono">
+
             <span>
               {String(
                 duration.hours,
@@ -537,6 +674,7 @@ export function Dashboard() {
               ).padStart(2, '0')}
               s
             </span>
+
           </div>
 
         </div>
@@ -548,8 +686,6 @@ export function Dashboard() {
 
       <div className="grid grid-cols-2 gap-4">
 
-        {/* MY MOOD */}
-
         <button
           type="button"
           onClick={() =>
@@ -559,11 +695,13 @@ export function Dashboard() {
         >
 
           <div className="flex items-center gap-2 mb-2">
+
             <Smile className="w-4 h-4 text-rose-400" />
 
             <span className="text-xs font-medium text-ink-500">
               How are you?
             </span>
+
           </div>
 
           {myMoodInfo ? (
@@ -586,8 +724,6 @@ export function Dashboard() {
 
         </button>
 
-        {/* ANNIVERSARY */}
-
         <div className="p-5 rounded-2xl bg-white border border-cream-300 shadow-sm">
 
           <div className="flex items-center gap-2 mb-2">
@@ -606,6 +742,7 @@ export function Dashboard() {
               <span className="font-serif text-xl font-bold text-rose-600">
                 {anniversaryCountdown}
               </span>{' '}
+
               days away
 
             </p>
@@ -631,6 +768,7 @@ export function Dashboard() {
             <span className="font-medium">
               {partner?.display_name}
             </span>{' '}
+
             is feeling{' '}
 
             <span className="text-lg">
@@ -699,6 +837,7 @@ export function Dashboard() {
           <div className="space-y-2.5">
 
             {upcoming.map((event) => (
+
               <div
                 key={event.id}
                 className="flex items-center justify-between"
@@ -709,6 +848,7 @@ export function Dashboard() {
                 </span>
 
                 <span className="text-xs text-ink-400">
+
                   {new Date(
                     event.event_date,
                   ).toLocaleDateString(
@@ -718,9 +858,11 @@ export function Dashboard() {
                       day: 'numeric',
                     },
                   )}
+
                 </span>
 
               </div>
+
             ))}
 
           </div>
@@ -754,6 +896,7 @@ export function Dashboard() {
             <div className="grid grid-cols-4 gap-3 mb-4">
 
               {MOODS.map((mood) => (
+
                 <button
                   key={mood.type}
                   type="button"
@@ -777,6 +920,7 @@ export function Dashboard() {
                   </div>
 
                 </button>
+
               ))}
 
             </div>
